@@ -1,3 +1,12 @@
+{{ enforce_required_columns(
+    model_name='fact_orders',
+    required_columns=['order_id', 'customer_id', 'order_date', 'amount']
+) }}
+
+
+
+
+
 with orders as  (
     select * from {{ ref('stg_orders' )}}
 ),
