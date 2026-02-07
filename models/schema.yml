@@ -1,0 +1,28 @@
+Version: 2
+
+#Models:
+ # - name: dim_customers
+ #   description: "Customer dimension."
+  #  columns:
+   #   - name: customer_id
+    #    tests: [not_null, unique]
+     # - name: customer_status
+      #   - accepted_values:
+        #      values: ["ACTIVE","INACTIVE"]
+
+
+sources:
+-  name: 
+   schema: 
+   tables:
+     - name:
+     - name:
+     - name:
+     - name:
+     - name:
+sources:
+-  name: 
+   schema: 
+   tables:
+     - name:
+     - name:
