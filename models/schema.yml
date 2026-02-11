@@ -12,17 +12,16 @@ Version: 2
 
 
 sources:
- - dfs_dw
+ - bfs_dw
    schema: 
-   - silver
+   - bfs_silver
    tables:
      - table_name
      - table_name
 
-sources:
- - dfs_dw
+
    schema: 
-   - gold
+   - bfs_gold
    tables:
      - table_name
      - table_name
