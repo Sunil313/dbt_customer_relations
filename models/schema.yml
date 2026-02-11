@@ -12,7 +12,7 @@ Version: 2
 
 
 sources:
- - def_db
+ - dfs_dw
    schema: 
    - silver
    tables:
