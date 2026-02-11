@@ -12,17 +12,17 @@ Version: 2
 
 
 sources:
--  name: 
+ - def_db
    schema: 
+   - silver
    tables:
-     - name:
-     - name:
-     - name:
-     - name:
-     - name:
+     - table_name
+     - table_name
+
 sources:
--  name: 
+ - dfs_dw
    schema: 
+   - gold
    tables:
-     - name:
-     - name:
+     - table_name
+     - table_name
