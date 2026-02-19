@@ -1,1 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dbt + AWS Athena — Detailed Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f2eb;
+  --bg2: #edeadf;
+  --surface: #ffffff;
+  --surface2: #f9f7f2;
+  --border: #d4cfc3;
+  --border2: #c4bfb0;
+  --ink: #1a1714;
+  --ink2: #3d3830;
+  --muted: #7a7060;
+  --accent: #c0392b;
+  --accent2: #1a5276;
+  --accent3: #1e8449;
+  --amber: #d4870a;
+  --purple: #6c3483;
+  --teal: #0e6655;
+  --s3: #d4870a;
+  --glue: #1e8449;
+  --athena: #1a5276;
+  --dbt: #c0392b;
+  --iam: #6c3483;
+  --ecs: #0e6655;
+}
 
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Lato', sans-serif;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
+/* NAV */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--ink);
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 3px solid var(--accent);
+  animation: slideDown 0.5s ease;
+}
+.nav-brand {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: #fff;
+  padding: 14px 24px 14px 0;
+  border-right: 1px solid #333;
+  margin-right: 24px;
+  letter-spacing: 0.1em;
+  opacity: 0.9;
+}
+.nav a {
+  font-size: 0.72rem;
+  color: #aaa;
+  text-decoration: none;
+  padding: 14px 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 0.2s;
+  font-weight: 400;
+}
+.nav a:hover { color: #fff; }
+
+/* HERO */
+.hero {
+  background: var(--ink);
+  padding: 80px 60px 70px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeIn 0.7s ease;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+.hero-kicker {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  font-weight: 900;
+  color: #fff;
+  line-height: 1.1;
+  max-width: 700px;
+  margin-bottom: 24px;
+}
+.hero h1 span { color: var(--amber); font-style: italic; }
+.hero-desc {
+  max-width: 620px;
+  color: #aaa;
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.75;
+  margin-bottom: 36px;
+}
+.hero-badges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hbadge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  padding: 5px 12px;
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.hbadge-s3 { background: rgba(212,135,10,0.15); color: #f0a830; border: 1px solid rgba(212,135,10,0.3); }
+.hbadge-athena { background: rgba(26,82,118,0.3); color: #7fb3d3; border: 1px solid rgba(26,82,118,0.4); }
+.hbadge-glue { background: rgba(30,132,73,0.15); color: #52be80; border: 1px solid rgba(30,132,73,0.3); }
+.hbadge-dbt { background: rgba(192,57,43,0.2); color: #e74c3c; border: 1px solid rgba(192,57,43,0.3); }
+.hbadge-iam { background: rgba(108,52,131,0.2); color: #c39bd3; border: 1px solid rgba(108,52,131,0.3); }
+
+/* MAIN CONTENT */
+.content {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 60px 40px;
+}
+
+/* SECTION HEADERS */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 32px;
+  margin-top: 60px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border2);
+}
+.section-header:first-child { margin-top: 0; }
+.section-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  font-weight: 600;
+}
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.section-subtitle {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-left: auto;
+  font-style: italic;
+}
+
+/* ARCHITECTURE FLOW */
+.arch-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+
+.flow-step {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  border-bottom: 1px solid var(--border);
+}
+.flow-step:last-child { border-bottom: none; }
+
+.flow-label {
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+.flow-label::after {
+  content: '→';
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.1rem;
+  color: var(--muted);
+  z-index: 2;
+  background: inherit;
+  padding: 4px 0;
+}
+.step-s3 { background: #fef9ec; }
+.step-glue { background: #f0faf4; }
+.step-athena { background: #edf4fc; }
+.step-dbt { background: #fdf1f0; }
+.step-ecs { background: #f0faf8; }
+.step-iam { background: #f8f0fc; }
+.step-ci { background: #f5f5f5; }
+
+.flow-icon { font-size: 2rem; margin-bottom: 8px; }
+.flow-step-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.flow-step-name.c-s3 { color: var(--s3); }
+.flow-step-name.c-glue { color: var(--glue); }
+.flow-step-name.c-athena { color: var(--athena); }
+.flow-step-name.c-dbt { color: var(--dbt); }
+.flow-step-name.c-ecs { color: var(--ecs); }
+.flow-step-name.c-iam { color: var(--iam); }
+.flow-step-name.c-ci { color: var(--ink2); }
+.flow-step-tag {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.flow-body {
+  padding: 24px 28px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.flow-body p {
+  font-size: 0.88rem;
+  color: var(--ink2);
+  margin-bottom: 12px;
+  line-height: 1.7;
+}
+.flow-body p:last-of-type { margin-bottom: 0; }
+.flow-body p strong { color: var(--ink); font-weight: 700; }
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  padding: 3px 9px;
+  border-radius: 3px;
+  background: var(--bg2);
+  color: var(--ink2);
+  border: 1px solid var(--border);
+  letter-spacing: 0.04em;
+}
+
+/* TWO COLUMN */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+
+/* CARDS */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 28px;
+  transition: box-shadow 0.2s;
+}
+.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.card-icon { font-size: 1.5rem; margin-bottom: 12px; }
+.card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--ink);
+}
+.card-body {
+  font-size: 0.83rem;
+  color: var(--ink2);
+  line-height: 1.7;
+}
+
+/* LAYERS VISUAL */
+.layers-visual {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  animation: fadeUp 0.6s ease 0.3s both;
+}
+.layer-col {
+  padding: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.layer-col:last-child { border-right: none; }
+.layer-head {
+  padding: 16px 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.lh-raw { background: #fef3cd; color: #856404; }
+.lh-bronze { background: #fdebd0; color: #784212; }
+.lh-silver { background: #d6eaf8; color: #1a5276; }
+.lh-gold { background: #d5f5e3; color: #145a32; }
+.lh-platinum { background: #e8daef; color: #4a235a; }
+
+.layer-body {
+  padding: 18px 16px;
+  font-size: 0.78rem;
+  color: var(--ink2);
+  line-height: 1.6;
+  flex: 1;
+  background: var(--surface);
+}
+.layer-body strong {
+  display: block;
+  font-size: 0.7rem;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--muted);
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.layer-models {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.model-chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  padding: 2px 7px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 2px;
+}
+
+/* CODE BLOCK */
+.code-block {
+  background: #1a1714;
+  border-radius: 4px;
+  overflow: hidden;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  animation: fadeUp 0.5s ease 0.2s both;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.code-header {
+  background: #2a2420;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #333;
+}
+.code-dots { display: flex; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #c0392b; }
+.dot-y { background: #d4870a; }
+.dot-g { background: #1e8449; }
+.code-filename {
+  font-size: 0.65rem;
+  color: #777;
+  letter-spacing: 0.08em;
+  margin-left: 6px;
+}
+.code-body {
+  padding: 20px 24px;
+  overflow-x: auto;
+}
+.code-body .ln { color: #444; margin-right: 16px; user-select: none; }
+.code-body .kw { color: #e74c3c; }
+.code-body .str { color: #f39c12; }
+.code-body .cm { color: #555; font-style: italic; }
+.code-body .fn { color: #3498db; }
+.code-body .val { color: #2ecc71; }
+.code-body .var { color: #9b59b6; }
+.code-body .hl { background: rgba(255,255,255,0.05); display: block; margin: 0 -24px; padding: 2px 24px; }
+
+/* PROCESS TIMELINE */
+.timeline {
+  position: relative;
+  padding-left: 40px;
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--accent), var(--athena), var(--glue), var(--iam));
+}
+.tl-item {
+  position: relative;
+  margin-bottom: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 22px 24px;
+}
+.tl-item::before {
+  content: attr(data-num);
+  position: absolute;
+  left: -40px;
+  top: 22px;
+  width: 22px;
+  height: 22px;
+  background: var(--ink);
+  color: #fff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 600;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 22px;
+  text-align: center;
+}
+.tl-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+}
+.tl-desc {
+  font-size: 0.84rem;
+  color: var(--ink2);
+  line-height: 1.7;
+}
+
+/* COMPARISON TABLE */
+.comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+  animation: fadeUp 0.5s ease 0.2s both;
+}
+.comp-table thead th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  background: var(--ink);
+  color: #fff;
+  text-align: left;
+  font-weight: 500;
+}
+.comp-table tbody tr:nth-child(even) { background: var(--surface2); }
+.comp-table tbody tr:nth-child(odd) { background: var(--surface); }
+.comp-table tbody tr:hover { background: #ede8de; }
+.comp-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink2);
+  vertical-align: top;
+}
+.comp-table td:first-child {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.yes { color: var(--glue); font-weight: 700; }
+.no { color: var(--accent); }
+
+/* CALLOUT */
+.callout {
+  border-left: 4px solid var(--amber);
+  background: #fffbf0;
+  padding: 20px 24px;
+  border-radius: 0 4px 4px 0;
+  margin: 24px 0;
+  font-size: 0.84rem;
+  color: var(--ink2);
+  line-height: 1.7;
+}
+.callout.info { border-color: var(--athena); background: #f0f6ff; }
+.callout.success { border-color: var(--glue); background: #f0faf4; }
+.callout.warn { border-color: var(--accent); background: #fdf5f5; }
+.callout strong { color: var(--ink); font-weight: 700; }
+.callout-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* GRID DETAIL */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+.detail-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.detail-card-head {
+  padding: 14px 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dc-s3 { background: #fef3cd; color: var(--s3); }
+.dc-glue { background: #d5f5e3; color: var(--glue); }
+.dc-athena { background: #d6eaf8; color: var(--athena); }
+.dc-dbt { background: #fdebd0; color: var(--dbt); }
+.dc-iam { background: #e8daef; color: var(--iam); }
+.dc-ecs { background: #d0ece7; color: var(--ecs); }
+.detail-card-body {
+  padding: 18px;
+  font-size: 0.8rem;
+  color: var(--ink2);
+  line-height: 1.7;
+}
+.detail-card-body ul {
+  list-style: none;
+  padding: 0;
+}
+.detail-card-body ul li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.detail-card-body ul li:last-child { border-bottom: none; }
+.detail-card-body ul li::before { content: '—'; color: var(--muted); flex-shrink: 0; margin-top: 2px; }
+
+/* FOOTER */
+footer {
+  background: var(--ink);
+  color: #555;
+  text-align: center;
+  padding: 40px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  margin-top: 80px;
+}
+footer span { color: #888; }
+
+/* ANIMATIONS */
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .flow-step { grid-template-columns: 160px 1fr; }
+  .two-col, .three-col { grid-template-columns: 1fr; }
+  .layers-visual { grid-template-columns: 1fr 1fr; }
+  .hero { padding: 50px 30px; }
+  .content { padding: 40px 20px; }
+  .nav { padding: 0 20px; }
+}
+@media (max-width: 600px) {
+  .flow-step { grid-template-columns: 1fr; }
+  .flow-label::after { display: none; }
+  .flow-body { border-left: none; border-top: 1px solid var(--border); }
+  .layers-visual { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">dbt × AWS × Athena</div>
+  <a href="#overview">Overview</a>
+  <a href="#layers">Data Layers</a>
+  <a href="#execution">Execution</a>
+  <a href="#config">Config</a>
+  <a href="#security">Security</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-kicker">Data Engineering Architecture · Complete Reference</div>
+  <h1>dbt + AWS <span>Athena</span><br>Detailed Architecture</h1>
+  <p class="hero-desc">
+    A production-grade data transformation pipeline using dbt Core as the transformation layer, Amazon Athena as the serverless SQL engine, S3 as the data lake, and AWS Glue as the metadata catalog — built for scale, reproducibility, and team collaboration.
+  </p>
+  <div class="hero-badges">
+    <span class="hbadge hbadge-s3">Amazon S3</span>
+    <span class="hbadge hbadge-athena">AWS Athena</span>
+    <span class="hbadge hbadge-glue">AWS Glue</span>
+    <span class="hbadge hbadge-dbt">dbt Core</span>
+    <span class="hbadge hbadge-iam">IAM Roles</span>
+  </div>
+</section>
+
+<div class="content">
+
+  <!-- SECTION 1: ARCHITECTURE OVERVIEW -->
+  <div id="overview">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2 class="section-title">End-to-End Architecture Flow</h2>
+      <span class="section-subtitle">How every component connects</span>
+    </div>
+
+    <div class="arch-flow">
+      <div class="flow-step">
+        <div class="flow-label step-s3">
+          <div class="flow-icon">🪣</div>
+          <div class="flow-step-name c-s3">Amazon S3</div>
+          <div class="flow-step-tag">Data Lake / Storage</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>Amazon S3 is the foundation of the entire architecture.</strong> It acts as the central object store for all data — raw ingested files, dbt-transformed outputs, Athena query results, and dbt artifacts like <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">manifest.json</code>.</p>
+          <p>Data is organized into prefixed "zones": <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">raw/</code>, <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">staging/</code>, <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">intermediate/</code>, <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">marts/</code>, and <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">athena-results/</code>. Files are stored as <strong>Parquet or ORC</strong> — columnar formats that dramatically reduce Athena query costs by minimizing data scanned.</p>
+          <p>S3's durability (99.999999999%) and virtually unlimited scale make it the perfect foundation. You only pay for what you store and query — no database instances, no idle compute costs.</p>
+          <div class="chip-row">
+            <span class="chip">s3://bucket/raw/</span>
+            <span class="chip">s3://bucket/staging/</span>
+            <span class="chip">s3://bucket/marts/</span>
+            <span class="chip">s3://bucket/athena-results/</span>
+            <span class="chip">Parquet</span>
+            <span class="chip">ORC</span>
+            <span class="chip">Snappy compression</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-glue">
+          <div class="flow-icon">📋</div>
+          <div class="flow-step-name c-glue">AWS Glue</div>
+          <div class="flow-step-tag">Data Catalog + Crawlers</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>AWS Glue Data Catalog is the metadata backbone.</strong> It stores table definitions, schemas, partition information, and data locations. Athena uses it as its metastore — every table Athena queries must be registered in the Glue Catalog.</p>
+          <p><strong>Glue Crawlers</strong> automatically scan S3 paths, infer schemas from Parquet/CSV/JSON files, and register or update table definitions. You can schedule crawlers to run after ingestion pipelines complete, keeping the catalog fresh without manual DDL.</p>
+          <p>For dbt, each model materialization (table or view) either creates a new Glue table entry or updates an existing one. The <strong>dbt-athena-community</strong> adapter handles this automatically by issuing <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">CREATE TABLE AS SELECT (CTAS)</code> statements which write data to S3 and register the table in Glue simultaneously.</p>
+          <div class="chip-row">
+            <span class="chip">Glue Crawler</span>
+            <span class="chip">Glue Database</span>
+            <span class="chip">Glue Table</span>
+            <span class="chip">Partition Registry</span>
+            <span class="chip">Schema Evolution</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-athena">
+          <div class="flow-icon">🔍</div>
+          <div class="flow-step-name c-athena">Amazon Athena</div>
+          <div class="flow-step-tag">Serverless SQL Engine</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>Athena is the serverless SQL query engine that sits over S3.</strong> It reads data directly from S3 using the schema from Glue Catalog, executes Presto/Trino-compatible SQL, and writes results to a dedicated S3 results bucket. There are no servers to provision, patch, or scale — Athena auto-scales to handle parallel queries.</p>
+          <p><strong>Workgroups</strong> are critical for production: they isolate different teams' queries, enforce per-query data scan limits (cost control), set the results S3 location, and enable per-workgroup CloudWatch metrics. Create separate workgroups for dbt runs, ad-hoc analysis, and dashboards.</p>
+          <p>dbt connects to Athena via the <strong>dbt-athena-community</strong> Python adapter, which uses <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">PyAthena</code> under the hood. dbt compiles SQL models and submits them as Athena queries. Tables are materialized as CTAS or INSERT INTO operations, views as Athena views.</p>
+          <div class="chip-row">
+            <span class="chip">dbt-athena-community</span>
+            <span class="chip">PyAthena</span>
+            <span class="chip">Workgroups</span>
+            <span class="chip">CTAS</span>
+            <span class="chip">INSERT INTO</span>
+            <span class="chip">Presto SQL</span>
+            <span class="chip">Cost per TB scanned</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-dbt">
+          <div class="flow-icon">🔧</div>
+          <div class="flow-step-name c-dbt">dbt Core</div>
+          <div class="flow-step-tag">Transformation Layer</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>dbt (data build tool) is the transformation engine.</strong> It provides a framework for writing SQL transformations as modular, version-controlled files. Each model is a <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">.sql</code> file containing a SELECT statement — dbt handles the DDL (<code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">CREATE TABLE AS</code>, <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">CREATE VIEW</code>) based on the configured materialization.</p>
+          <p>The <strong>dbt DAG (Directed Acyclic Graph)</strong> is automatically inferred from <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">ref()</code> and <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">source()</code> macros in your SQL. dbt resolves dependencies and runs models in the correct order, with optional parallelism. Every model can have associated <strong>schema tests</strong> (not_null, unique, accepted_values, relationships) and <strong>singular tests</strong>.</p>
+          <p>The <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">profiles.yml</code> contains the Athena connection: region, S3 results location, workgroup, and database. <strong>No credentials are hardcoded</strong> — the AWS SDK credential chain automatically picks up the execution environment's IAM role.</p>
+          <div class="chip-row">
+            <span class="chip">models/</span>
+            <span class="chip">tests/</span>
+            <span class="chip">macros/</span>
+            <span class="chip">seeds/</span>
+            <span class="chip">snapshots/</span>
+            <span class="chip">dbt docs generate</span>
+            <span class="chip">ref() / source()</span>
+            <span class="chip">DAG execution</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-ecs">
+          <div class="flow-icon">🐳</div>
+          <div class="flow-step-name c-ecs">ECS / CodeBuild / MWAA</div>
+          <div class="flow-step-tag">Compute Host</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>The compute host is where dbt actually runs.</strong> Three common options exist: <strong>Amazon ECS (Fargate)</strong> runs dbt in a Docker container with a Task Role — ideal for scheduled pipelines triggered by EventBridge. <strong>AWS CodeBuild</strong> is perfect for CI/CD-triggered runs on pull requests. <strong>Amazon MWAA (Managed Airflow)</strong> is best when dbt is one operator in a larger workflow with upstream ingestion steps.</p>
+          <p>In all cases, the compute host assumes an <strong>IAM Task Role</strong> (or Instance Profile / execution role). The AWS SDK running inside dbt's Python process automatically discovers this role via the instance metadata service (IMDS) — no key injection, no environment variable credentials needed.</p>
+          <div class="chip-row">
+            <span class="chip">ECS Fargate</span>
+            <span class="chip">AWS CodeBuild</span>
+            <span class="chip">Amazon MWAA</span>
+            <span class="chip">EC2 + Instance Profile</span>
+            <span class="chip">IMDS v2</span>
+            <span class="chip">Task Role</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-iam">
+          <div class="flow-icon">🛡️</div>
+          <div class="flow-step-name c-iam">IAM Role</div>
+          <div class="flow-step-tag">Identity & Permissions</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>The IAM Execution Role is the identity attached to the compute host.</strong> It grants least-privilege access to every AWS service the dbt process needs: Athena query execution, S3 read/write on specific prefixes, and Glue Catalog reads for schema discovery and writes for table creation/updates.</p>
+          <p>The role's <strong>trust policy</strong> specifies who can assume it — for ECS tasks this is <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">ecs-tasks.amazonaws.com</code>, for EC2 it's <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">ec2.amazonaws.com</code>, for GitHub Actions it's the OIDC provider. The <strong>permission policy</strong> uses resource-level scoping — e.g. S3 access is scoped to specific bucket prefixes, not <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">*</code>.</p>
+          <div class="chip-row">
+            <span class="chip">Least privilege</span>
+            <span class="chip">Trust policy</span>
+            <span class="chip">Resource-level scoping</span>
+            <span class="chip">STS AssumeRole</span>
+            <span class="chip">OIDC for CI/CD</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-label step-ci">
+          <div class="flow-icon">⚙️</div>
+          <div class="flow-step-name c-ci">CI/CD Pipeline</div>
+          <div class="flow-step-tag">GitHub Actions / CodePipeline</div>
+        </div>
+        <div class="flow-body">
+          <p><strong>The CI/CD pipeline ties together development workflow and production runs.</strong> On every pull request, a pipeline runs <code style="font-family: 'IBM Plex Mono'; font-size: 0.8em; background: #f0f0f0; padding: 1px 5px;">dbt build --select state:modified+</code> using slim CI — only running models and tests that changed. This gives fast feedback without running the entire project.</p>
+          <p>GitHub Actions connects to AWS via <strong>OIDC federation</strong> — the workflow exchanges a GitHub-signed JWT for temporary AWS credentials via STS. No AWS access keys are ever stored in GitHub secrets. On merge to main, a production run is triggered in ECS/CodeBuild that runs the full dbt project and uploads the resulting artifacts to S3.</p>
+          <div class="chip-row">
+            <span class="chip">GitHub Actions OIDC</span>
+            <span class="chip">dbt slim CI</span>
+            <span class="chip">state:modified+</span>
+            <span class="chip">dbt build</span>
+            <span class="chip">Artifacts upload</span>
+            <span class="chip">STS AssumeRole</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: DATA LAYERS -->
+  <div id="layers">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2 class="section-title">Medallion Data Architecture Layers</h2>
+      <span class="section-subtitle">RAW → BRONZE → SILVER → GOLD → PLATINUM</span>
+    </div>
+
+    <div class="callout info">
+      <div class="callout-title">ℹ️ Why Medallion Architecture?</div>
+      The medallion (multi-hop) architecture progressively refines data quality at each layer. Raw data is never modified — all transformations are incremental and auditable. Each layer is independently queryable, enabling both operational and analytical use cases.
+    </div>
+
+    <div class="layers-visual">
+      <div class="layer-col">
+        <div class="layer-head lh-raw">RAW / Source</div>
+        <div class="layer-body">
+          <strong>S3 Location</strong>
+          s3://bucket/raw/{source}/{table}/
+          <br><br>
+          Exact copies of source data as delivered by ingestion tools. Never transformed. Used as the audit trail. Formats: JSON, CSV, Avro, Parquet.
+          <div class="layer-models">
+            <span class="model-chip">source: raw_db</span>
+            <span class="model-chip">dbt source()</span>
+            <span class="model-chip">Freshness checks</span>
+          </div>
+        </div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-head lh-bronze">BRONZE / Staging</div>
+        <div class="layer-body">
+          <strong>Prefix</strong>
+          s3://bucket/staging/
+          <br><br>
+          1:1 with source tables. Casts data types, renames columns to conventions, deduplicates, and applies basic filtering. One staging model per source table.
+          <div class="layer-models">
+            <span class="model-chip">stg_orders.sql</span>
+            <span class="model-chip">stg_customers.sql</span>
+            <span class="model-chip">stg_products.sql</span>
+          </div>
+        </div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-head lh-silver">SILVER / Intermediate</div>
+        <div class="layer-body">
+          <strong>Prefix</strong>
+          s3://bucket/intermediate/
+          <br><br>
+          Joins multiple staging models together, applies business logic, enriches with reference data. Not exposed to end users — stepping stones to marts.
+          <div class="layer-models">
+            <span class="model-chip">int_orders_enriched.sql</span>
+            <span class="model-chip">int_customer_segments.sql</span>
+            <span class="model-chip">int_product_revenue.sql</span>
+          </div>
+        </div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-head lh-gold">GOLD / Marts</div>
+        <div class="layer-body">
+          <strong>Prefix</strong>
+          s3://bucket/marts/
+          <br><br>
+          Business-facing dimensional models and fact tables. Optimized for dashboards, reporting, and analytics. Schema follows star or snowflake conventions.
+          <div class="layer-models">
+            <span class="model-chip">fct_orders.sql</span>
+            <span class="model-chip">dim_customers.sql</span>
+            <span class="model-chip">dim_products.sql</span>
+            <span class="model-chip">fct_revenue.sql</span>
+          </div>
+        </div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-head lh-platinum">PLATINUM / Metrics</div>
+        <div class="layer-body">
+          <strong>Prefix</strong>
+          s3://bucket/metrics/
+          <br><br>
+          Pre-aggregated metrics, KPI summaries, and ML feature tables. These are the highest-trust, most stable tables — versioned and tested exhaustively.
+          <div class="layer-models">
+            <span class="model-chip">mrt_daily_revenue.sql</span>
+            <span class="model-chip">mrt_cohort_analysis.sql</span>
+            <span class="model-chip">features_clv.sql</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: EXECUTION RUNTIME -->
+  <div id="execution">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2 class="section-title">dbt Execution Runtime</h2>
+      <span class="section-subtitle">What happens when dbt run executes</span>
+    </div>
+
+    <div class="timeline">
+      <div class="tl-item" data-num="1">
+        <div class="tl-title">PARSE & COMPILE</div>
+        <div class="tl-desc">dbt reads all <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">.sql</code> model files, Jinja macros, and <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">schema.yml</code> definitions. It resolves all <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">ref()</code> and <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">source()</code> calls, substituting actual Athena database and table names. The result is compiled SQL stored in <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">target/compiled/</code>. dbt also builds the DAG — the dependency graph that determines execution order.</div>
+      </div>
+      <div class="tl-item" data-num="2">
+        <div class="tl-title">IAM CREDENTIAL RESOLUTION</div>
+        <div class="tl-desc">The AWS SDK (boto3/PyAthena) starts its credential chain: it first checks environment variables (<code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">AWS_ACCESS_KEY_ID</code> — none set), then checks the IMDS endpoint for the ECS task's IAM role. It retrieves temporary credentials (access key + secret + session token) with a short expiry. These rotate automatically. dbt never sees or stores these credentials directly.</div>
+      </div>
+      <div class="tl-item" data-num="3">
+        <div class="tl-title">CONNECTION TEST</div>
+        <div class="tl-desc">dbt-athena-community establishes a connection by making a lightweight Athena API call (<code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">list_databases</code>) to verify credentials and network connectivity. If this fails, dbt exits early with a connection error — no models run. This early check prevents partial runs from creating incomplete data states.</div>
+      </div>
+      <div class="tl-item" data-num="4">
+        <div class="tl-title">DAG EXECUTION (PARALLEL)</div>
+        <div class="tl-desc">dbt traverses the DAG topologically. Models with no remaining dependencies are eligible to run. With <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">--threads 4</code>, up to 4 models run simultaneously — each submitting a separate Athena query. The adapter polls the Athena API for query completion status. CTAS materializations write results directly to S3 as Parquet, register in Glue, and replace any previous version.</div>
+      </div>
+      <div class="tl-item" data-num="5">
+        <div class="tl-title">INCREMENTAL MODELS</div>
+        <div class="tl-desc">For models materialized as <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">incremental</code>, dbt checks if the table already exists. On first run it performs a full load. On subsequent runs it uses the <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">is_incremental()</code> macro to filter only new/changed records, then issues an <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">INSERT INTO</code> or a merge strategy. With Athena + S3, incremental models append new Parquet files to the S3 prefix partition.</div>
+      </div>
+      <div class="tl-item" data-num="6">
+        <div class="tl-title">TESTS & FRESHNESS</div>
+        <div class="tl-desc">After models complete, <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">dbt test</code> runs all schema tests (not_null, unique, relationships, accepted_values) as SELECT queries against Athena. Tests that return rows are failures. Source freshness checks query the <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">loaded_at_field</code> timestamp to verify ingestion is recent. Results are written to <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">target/run_results.json</code>.</div>
+      </div>
+      <div class="tl-item" data-num="7">
+        <div class="tl-title">ARTIFACTS UPLOAD & OBSERVABILITY</div>
+        <div class="tl-desc">Upon completion, the pipeline uploads <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">manifest.json</code>, <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">run_results.json</code>, and <code style="font-family: 'IBM Plex Mono'; font-size: 0.85em;">catalog.json</code> to an S3 artifacts path. These power dbt docs, enable slim CI (state comparison), and feed observability tools. CloudWatch logs capture all stdout. Athena CloudWatch metrics show query execution times and data scanned per workgroup.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: CONFIG -->
+  <div id="config">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2 class="section-title">Configuration Reference</h2>
+      <span class="section-subtitle">profiles.yml, dbt_project.yml, model configs</span>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div class="code-block">
+          <div class="code-header">
+            <div class="code-dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+            <span class="code-filename">~/.dbt/profiles.yml</span>
+          </div>
+          <div class="code-body"><pre><span class="cm"># profiles.yml — Athena connection config</span>
+<span class="cm"># NO aws_access_key_id / secret needed!</span>
+
+<span class="var">my_project</span>:
+  <span class="kw">target</span>: <span class="str">dev</span>
+  <span class="kw">outputs</span>:
+    <span class="str">dev</span>:
+      <span class="kw">type</span>: <span class="str">athena</span>
+      <span class="kw">region_name</span>: <span class="str">eu-west-1</span>
+      <span class="kw">database</span>: <span class="str">awsdatacatalog</span>
+      <span class="kw">schema</span>: <span class="str">dbt_dev</span>
+      <span class="kw">s3_staging_dir</span>: <span class="str">s3://my-bucket/athena-results/dev/</span>
+      <span class="kw">s3_data_dir</span>: <span class="str">s3://my-bucket/dbt/dev/</span>
+      <span class="kw">work_group</span>: <span class="str">dbt-dev-workgroup</span>
+      <span class="kw">threads</span>: <span class="val">4</span>
+      <span class="cm"># aws_profile: default  ← for local dev with SSO</span>
+      <span class="cm"># No keys — IAM role auto-discovered</span>
+
+    <span class="str">prod</span>:
+      <span class="kw">type</span>: <span class="str">athena</span>
+      <span class="kw">region_name</span>: <span class="str">eu-west-1</span>
+      <span class="kw">database</span>: <span class="str">awsdatacatalog</span>
+      <span class="kw">schema</span>: <span class="str">dbt_prod</span>
+      <span class="kw">s3_staging_dir</span>: <span class="str">s3://my-bucket/athena-results/prod/</span>
+      <span class="kw">s3_data_dir</span>: <span class="str">s3://my-bucket/dbt/prod/</span>
+      <span class="kw">work_group</span>: <span class="str">dbt-prod-workgroup</span>
+      <span class="kw">threads</span>: <span class="val">8</span></pre></div>
+        </div>
+      </div>
+      <div>
+        <div class="code-block">
+          <div class="code-header">
+            <div class="code-dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+            <span class="code-filename">dbt_project.yml</span>
+          </div>
+          <div class="code-body"><pre><span class="var">name</span>: <span class="str">my_project</span>
+<span class="var">version</span>: <span class="str">'1.0.0'</span>
+<span class="var">profile</span>: <span class="str">my_project</span>
+
+<span class="var">model-paths</span>: [<span class="str">"models"</span>]
+<span class="var">seed-paths</span>:  [<span class="str">"seeds"</span>]
+<span class="var">test-paths</span>:  [<span class="str">"tests"</span>]
+<span class="var">macro-paths</span>: [<span class="str">"macros"</span>]
+
+<span class="var">models</span>:
+  <span class="var">my_project</span>:
+    <span class="var">staging</span>:
+      <span class="kw">+materialized</span>: <span class="str">view</span>
+      <span class="kw">+schema</span>: <span class="str">staging</span>
+    <span class="var">intermediate</span>:
+      <span class="kw">+materialized</span>: <span class="str">table</span>
+      <span class="kw">+schema</span>: <span class="str">intermediate</span>
+      <span class="kw">+file_format</span>: <span class="str">parquet</span>
+    <span class="var">marts</span>:
+      <span class="kw">+materialized</span>: <span class="str">table</span>
+      <span class="kw">+schema</span>: <span class="str">marts</span>
+      <span class="kw">+file_format</span>: <span class="str">parquet</span>
+      <span class="kw">+write_compression</span>: <span class="str">snappy</span>
+      <span class="kw">+partitioned_by</span>: [<span class="str">'event_date'</span>]
+
+<span class="var">seeds</span>:
+  <span class="var">my_project</span>:
+    <span class="kw">+file_format</span>: <span class="str">parquet</span></pre></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+          <span class="code-filename">models/marts/fct_orders.sql — Example Incremental Model</span>
+        </div>
+        <div class="code-body"><pre><span class="cm">{{
+  config(
+    materialized = 'incremental',
+    incremental_strategy = 'append',
+    file_format = 'parquet',
+    write_compression = 'snappy',
+    partitioned_by = ['order_date'],
+    tags = ['mart', 'daily']
+  )
+}}</span>
+
+<span class="kw">WITH</span> enriched_orders <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    o.order_id,
+    o.customer_id,
+    o.order_date,
+    o.status,
+    c.customer_segment,
+    c.region,
+    p.product_category,
+    o.quantity * p.unit_price <span class="kw">AS</span> revenue
+  <span class="kw">FROM</span> <span class="fn">{{ ref('stg_orders') }}</span> o
+  <span class="kw">LEFT JOIN</span> <span class="fn">{{ ref('int_customer_segments') }}</span> c
+    <span class="kw">ON</span> o.customer_id = c.customer_id
+  <span class="kw">LEFT JOIN</span> <span class="fn">{{ ref('stg_products') }}</span> p
+    <span class="kw">ON</span> o.product_id = p.product_id
+  <span class="cm">-- Only process new records on incremental runs</span>
+  <span class="fn">{% if is_incremental() %}</span>
+  <span class="kw">WHERE</span> o.updated_at > (
+    <span class="kw">SELECT</span> <span class="fn">MAX</span>(updated_at) <span class="kw">FROM</span> <span class="fn">{{ this }}</span>
+  )
+  <span class="fn">{% endif %}</span>
+)
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> enriched_orders</pre></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: SECURITY -->
+  <div id="security">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2 class="section-title">Security & IAM Architecture</h2>
+      <span class="section-subtitle">Zero static credentials — full role-based access</span>
+    </div>
+
+    <div class="callout success">
+      <div class="callout-title">✅ Core Principle</div>
+      <strong>Never use long-term AWS credentials.</strong> The AWS SDK credential chain resolves authentication in order: environment variables → shared credentials file → IAM Instance Profile/Task Role → Container credentials. In production, only the Task Role / Instance Profile path is active. This means rotating, auditable, automatically expiring temporary credentials — no secrets to leak.
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-card">
+        <div class="detail-card-head dc-iam">🛡️ IAM Role — Permissions Policy</div>
+        <div class="detail-card-body">
+          <ul>
+            <li><strong>athena:StartQueryExecution</strong> — submit queries</li>
+            <li><strong>athena:GetQueryExecution, GetQueryResults</strong> — poll and fetch results</li>
+            <li><strong>athena:StopQueryExecution</strong> — cancel hung queries</li>
+            <li><strong>s3:GetObject, PutObject</strong> — scoped to bucket/dbt/* and results/*</li>
+            <li><strong>s3:ListBucket</strong> — required for CTAS to check existing objects</li>
+            <li><strong>glue:GetDatabase, GetTable</strong> — read schema metadata</li>
+            <li><strong>glue:CreateTable, UpdateTable, BatchCreatePartition</strong> — register dbt output tables</li>
+          </ul>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-head dc-ecs">🐳 ECS Task Trust Policy</div>
+        <div class="detail-card-body">
+          <ul>
+            <li>Principal: <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">ecs-tasks.amazonaws.com</code></li>
+            <li>Action: <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">sts:AssumeRole</code></li>
+            <li>ECS injects credentials via IMDS endpoint into the container</li>
+            <li>Credentials expire and rotate every 1 hour automatically</li>
+            <li>CloudTrail logs every AssumeRole event with task metadata</li>
+          </ul>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-head dc-glue">⚙️ GitHub Actions OIDC (CI/CD)</div>
+        <div class="detail-card-body">
+          <ul>
+            <li>Configure AWS as OIDC provider in IAM using GitHub's discovery URL</li>
+            <li>Trust policy: <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">token.actions.githubusercontent.com</code> principal</li>
+            <li>Condition: <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">sub: repo:org/repo:ref:refs/heads/main</code></li>
+            <li>Workflow uses <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">aws-actions/configure-aws-credentials</code></li>
+            <li><strong>Zero AWS secrets</strong> stored in GitHub — token exchange only</li>
+          </ul>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-head dc-s3">🪣 S3 Bucket Policies</div>
+        <div class="detail-card-body">
+          <ul>
+            <li>Block all public access on all dbt-related buckets</li>
+            <li>Enable default encryption (SSE-S3 or SSE-KMS)</li>
+            <li>Bucket policy restricts access to specific IAM role ARNs only</li>
+            <li>Lifecycle rules auto-expire old Athena query results (7 days)</li>
+            <li>Enable versioning on the dbt artifacts bucket for rollback</li>
+          </ul>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-head dc-athena">🔍 Athena Workgroup Controls</div>
+        <div class="detail-card-body">
+          <ul>
+            <li>Enforce workgroup-level results location (override user settings)</li>
+            <li>Set per-query data scan limit (e.g. 1 TB max) to prevent runaway costs</li>
+            <li>Enable CloudWatch metrics per workgroup for cost attribution</li>
+            <li>Separate workgroups for prod, dev, and BI dashboards</li>
+            <li>IAM condition keys scope roles to specific workgroups only</li>
+          </ul>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="detail-card-head dc-dbt">🔍 Monitoring & Audit</div>
+        <div class="detail-card-body">
+          <ul>
+            <li>AWS CloudTrail — full API audit log for Athena, S3, Glue, IAM</li>
+            <li>Athena query history — per-query execution time, bytes scanned</li>
+            <li>CloudWatch Logs — dbt stdout/stderr for every run</li>
+            <li>AWS Cost Explorer — tag dbt runs with <code style="font-family:'IBM Plex Mono'; font-size:0.8em;">Project=dbt</code> for cost visibility</li>
+            <li>IAM Access Analyzer — detect over-permissioned roles automatically</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Credential comparison table -->
+    <div style="margin-top: 36px;">
+      <h3 style="font-family: 'Playfair Display', serif; font-size: 1.1rem; margin-bottom: 16px; color: var(--ink);">Credential Strategy Comparison</h3>
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Production Safe?</th>
+            <th>Auto-Rotates?</th>
+            <th>Recommended Use</th>
+            <th>Setup Complexity</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IAM Task Role (ECS)</td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td><span class="yes">✓ Yes (1hr)</span></td>
+            <td>Production ECS/Fargate runs</td>
+            <td>Low</td>
+          </tr>
+          <tr>
+            <td>Instance Profile (EC2)</td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td>EC2-hosted dbt runs</td>
+            <td>Low</td>
+          </tr>
+          <tr>
+            <td>OIDC (GitHub Actions)</td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td>CI/CD pipelines</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>AWS SSO + named profile</td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td>Local developer runs</td>
+            <td>Low</td>
+          </tr>
+          <tr>
+            <td>aws-vault</td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td><span class="yes">✓ Yes</span></td>
+            <td>Local dev (encrypted keychain)</td>
+            <td>Low</td>
+          </tr>
+          <tr>
+            <td>Long-term IAM access keys</td>
+            <td><span class="no">✗ No</span></td>
+            <td><span class="no">✗ No</span></td>
+            <td>Legacy only — migrate away</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Hardcoded keys in profiles.yml</td>
+            <td><span class="no">✗ Never</span></td>
+            <td><span class="no">✗ No</span></td>
+            <td>Do not use under any circumstance</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION 6: COST OPTIMIZATION -->
+  <div>
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2 class="section-title">Cost Optimization</h2>
+      <span class="section-subtitle">Athena charges $5 per TB scanned — design to minimize</span>
+    </div>
+    <div class="three-col">
+      <div class="card">
+        <div class="card-icon">📦</div>
+        <div class="card-title">Use Columnar Formats</div>
+        <div class="card-body">Store all dbt outputs as <strong>Parquet with Snappy compression</strong>. Athena only reads the columns your query touches. A query on 2 columns out of 50 reads ~4% of the data. ORC is also excellent. Avoid CSV/JSON in production marts.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📂</div>
+        <div class="card-title">Partition Strategically</div>
+        <div class="card-body">Use <code style="font-family:'IBM Plex Mono'; font-size:0.85em;">partitioned_by = ['event_date']</code> in dbt model configs. Athena uses partition pruning to skip entire S3 prefixes. A query for a single day on a 3-year dataset reads ~0.1% of the data. Balance partition granularity — too many small files hurts.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📏</div>
+        <div class="card-title">Right-size File Counts</div>
+        <div class="card-body">Athena performs best with files between <strong>128MB–1GB each</strong>. Too many tiny files (the "small files problem") causes slow metadata operations. Use the <code style="font-family:'IBM Plex Mono'; font-size:0.85em;">optimize_write</code> config in dbt-athena or schedule periodic OPTIMIZE / vacuum jobs.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<footer>
+  <span>dbt Core · Amazon Athena · AWS Glue · Amazon S3 · IAM Roles · ECS Fargate</span><br><br>
+  Architecture Reference — Generated 2026 · No static credentials · IAM role-based auth throughout
+</footer>
+
+</body>
+</html>
