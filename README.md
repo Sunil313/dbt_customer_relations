@@ -1,5 +1,5 @@
 
-# Claims Analytics dbt Models
+# Customer Relations & Claims Analytics dbt Models
 
 This project builds a **claims reserves** and **account balances** analytics mart using dbt.
 It delivers daily‑grain facts and conformed dimensions to support reporting, trend analysis, and reconciliation.
