@@ -6,7 +6,6 @@
 ) }}
 
 with base as (
-  -- start from the daily fact results (can be your current model or re-constructed CTE)
   select
     account_id,
     balance_date,
