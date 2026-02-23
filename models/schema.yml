@@ -8,7 +8,22 @@ models:
     columns:
       - name: claim_reserve_sk
         description: "Surrogate key over (claim_id, snapshot_date, reserve_type)."
-        tests: [unique, not_null]
+        tests: 
+          - [unique, not_null]
+          - relationships:
+              to: ref('dim_claim')
+              field: claim_id
+          - relationships:
+              to: ref('dim_calendar')
+              field: snapshot_date
+          - dbt_utils.relationships_where:
+              from: "reserve_type"
+              to: ref('dim_reserve_type')
+              field: "reserve_type"
+              from_condition: "1=1"
+              to_condition: "is_active = 1"
+
+
 
       - name: claim_id
         tests:
@@ -188,6 +203,9 @@ models:
           - accepted_values:
               values: [0, 1]
     tests:
+      - name: fct_claim_reserve_snapshots__policy_point_in_time
+        severity: error
+        
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: ["account_id", "balance_date"]
 
