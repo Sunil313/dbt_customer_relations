@@ -2,10 +2,119 @@ version: 2
 
 sources:
   - name: core
+    description: "Raw/core source tables feeding facts & dimensions. Update 'schema' to your raw schema."
     schema: raw
     tables:
       - name: claim_reserves_snapshots
+        description: "Daily snapshots of reserves by claim and reserve type from the source system."
+        identifier: claim_reserves_snapshots
         loaded_at_field: reserve_snapshot_loaded_at
         freshness:
           warn_after: {count: 2, period: hour}
           error_after: {count: 6, period: hour}
+        columns:
+          - name: claim_id
+            tests: [not_null]
+          - name: reserve_snapshot_date
+            tests: [not_null]
+          - name: reserve_type
+            tests: [not_null]
+          - name: reserve_amount
+            tests: [not_null]
+
+      - name: claims
+        description: "Claim header/master from the source system."
+        identifier: claims
+        loaded_at_field: claims_loaded_at
+        freshness:
+          warn_after: {count: 6, period: hour}
+          error_after: {count: 12, period: hour}
+        columns:
+          - name: claim_id
+            tests: [unique, not_null]
+          - name: policy_id
+            tests: [not_null]
+
+      - name: policies
+        description: "Policy master; often SCD in staging or modeled into dim_policy as SCD2."
+        identifier: policies
+        loaded_at_field: policies_loaded_at
+        freshness:
+          warn_after: {count: 6, period: hour}
+          error_after: {count: 12, period: hour}
+        columns:
+          - name: policy_id
+            tests: [not_null]
+          - name: product_code
+          - name: customer_id
+
+      - name: products
+        description: "Product master data."
+        identifier: products
+        loaded_at_field: products_loaded_at
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+        columns:
+          - name: product_code
+            tests: [unique, not_null]
+
+      - name: customers
+        description: "Customer master data (person / organization)."
+        identifier: customers
+        loaded_at_field: customers_loaded_at
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+        columns:
+          - name: customer_id
+            tests: [unique, not_null]
+
+      - name: accounts
+        description: "Bank/ledger accounts with opening balances and currency."
+        identifier: accounts
+        loaded_at_field: accounts_loaded_at
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+        columns:
+          - name: account_id
+            tests: [unique, not_null]
+          - name: opening_balance
+          - name: currency_code
+          - name: account_open_date
+
+      - name: transactions
+        description: "Signed financial transactions per account (debits/credits)."
+        identifier: transactions
+        loaded_at_field: transactions_loaded_at
+        freshness:
+          warn_after: {count: 2, period: hour}
+          error_after: {count: 6, period: hour}
+        columns:
+          - name: account_id
+            tests: [not_null]
+          - name: transaction_date
+            tests: [not_null]
+          - name: signed_amount
+
+      - name: calendar
+        description: "Enterprise calendar/date dimension seed or raw table."
+        identifier: calendar
+        loaded_at_field: calendar_loaded_at
+        freshness:
+          warn_after: {count: 168, period: hour}   # 7 days
+          error_after: {count: 720, period: hour}  # 30 days
+        columns:
+          - name: date_day
+            tests: [unique, not_null]
+
+# USAGE EXAMPLES IN MODELS (staging layer):
+# select * from {{ source('core', 'claim_reserves_snapshots') }}
+# select * from {{ source('core', 'claims') }}
+# select * from {{ source('core', 'policies') }}
+# select * from {{ source('core', 'products') }}
+# select * from {{ source('core', 'customers') }}
+# select * from {{ source('core', 'accounts') }}
+# select * from {{ source('core', 'transactions') }}
+# select * from {{ source('core', 'calendar') }}
