@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: core
+    schema: raw
+    tables:
+      - name: claim_reserves_snapshots
+        loaded_at_field: reserve_snapshot_loaded_at
+        freshness:
+          warn_after: {count: 2, period: hour}
+          error_after: {count: 6, period: hour}
