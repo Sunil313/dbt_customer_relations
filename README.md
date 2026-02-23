@@ -211,9 +211,20 @@ dbt run --select marts.dimensions
 # Run with full refresh for snapshot fact if needed
 dbt run --select fct_claim_reserve_snapshots --full-refresh
 
-# Tests & docs
+# Tests 
+
+# All tests
 dbt test
-dbt docs generate && dbt docs serve
+
+# Only facts
+dbt test --select fct_claim_reserve_snapshots fct_account_balance_daily
+
+# Only dims
+dbt test --select dim_policy dim_claim dim_product dim_customer dim_reserve_type dim_calendar
+
+# Only custom data test
+dbt test --select test_name:fct_claim_reserve_snapshots__policy_point_in_time
+``
 ```
 
 ---
