@@ -82,6 +82,111 @@ models:
         tests:
           - not_null
 
+  - name: dim_policy
+    description: "Policy dimension (SCD2). One row per policy version."
+    config:
+      tags: ["dim", "policy", "scd2"]
+    columns:
+      - name: policy_sk
+        tests: [unique, not_null]
+
+      - name: policy_id
+        tests:
+          - not_null
+
+      - name: effective_from
+        tests: [not_null]
+
+      - name: effective_to
+        tests: []
+
+      - name: is_current_record
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+    tests:
+      # Each (policy_id, effective_from) row should be unique
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["policy_id", "effective_from"]
+
+      # Effective_from < Effective_to when to is present
+      - dbt_utils.expression_is_true:
+          expression: "coalesce(effective_to, '2999-12-31') > effective_from"
+
+      # No temporal overlaps across versions of the same business key
+      - dbt_utils.no_overlapping_ranges:
+          partition_by: "policy_id"
+          lower_bound_column: "effective_from"
+          upper_bound_column: "coalesce(effective_to, '2999-12-31')"
+
+  - name: dim_claim
+    description: "Claim attributes."
+    config:
+      tags: ["dim", "claim"]
+    columns:
+      - name: claim_id
+        tests: [unique, not_null]
+
+      - name: claim_status
+        tests:
+          - accepted_values:
+              values: ["OPEN", "CLOSED", "REOPENED"]   # adjust to your domain
+
+      # Optional: No future loss dates beyond today
+      # - name: loss_date
+      #   tests:
+      #     - dbt_utils.expression_is_true:
+      #         expression: "loss_date <= current_date"
+
+  - name: dim_product
+    description: "Product master."
+    config:
+      tags: ["dim", "product"]
+    columns:
+      - name: product_code
+        tests: [unique, not_null]
+
+      # - name: product_line
+      #   tests:
+      #     - accepted_values:
+      #         values: ["AUTO", "HOME", "LIFE", "COMMERCIAL"]  # example
+
+  - name: dim_customer
+    description: "Customer master (person or organization)."
+    config:
+      tags: ["dim", "customer"]
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+      - name: customer_type
+        tests:
+          - accepted_values:
+              values: ["PERSON", "ORGANIZATION"]
+
+  - name: dim_reserve_type
+    description: "Reserve type domain."
+    config:
+      tags: ["dim", "domain"]
+    columns:
+      - name: reserve_type_sk
+        tests: [unique, not_null]
+
+      - name: reserve_type
+        tests: [unique, not_null]
+
+  - name: dim_calendar
+    description: "Calendar/date dimension."
+    config:
+      tags: ["dim", "calendar", "date"]
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
+      - name: is_weekend
+        tests:
+          - accepted_values:
+              values: [0, 1]
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: ["account_id", "balance_date"]
@@ -89,3 +194,4 @@ models:
       # Optional sanity: closing balance must be >= 0 if business rule applies
       # - dbt_utils.expression_is_true:
       #     expression: "closing_balance >= 0"
+
