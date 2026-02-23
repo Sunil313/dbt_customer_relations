@@ -1,27 +1,70 @@
-Version: 2
+version: 2
 
-#Models:
- # - name: dim_customers
- #   description: "Customer dimension."
-  #  columns:
-   #   - name: customer_id
-    #    tests: [not_null, unique]
-     # - name: customer_status
-      #   - accepted_values:
-        #      values: ["ACTIVE","INACTIVE"]
+models:
+  - name: fct_account_balance_daily
+    description: "Daily account balances per account_id and date."
+    columns:
+      - name: account_balance_sk
+        tests: [unique, not_null]
+      - name: account_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_account')
+              field: account_id
+      - name: balance_date
+        tests: [not_null]
 
+  - name: dim_account
+    description: "Account attributes (non-transactional)."
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+        
+  - name: fct_claim_reserve_snapshots
+    description: "Daily reserve snapshots per claim, date, and reserve type."
+    columns:
+      - name: claim_reserve_sk
+        tests: [not_null, unique]
+      - name: claim_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_claim')
+              field: claim_id
+      - name: policy_id
+        tests:
+          - relationships:
+              to: ref('dim_policy')
+              field: policy_id
+      - name: snapshot_date
+        tests: [not_null]
+      - name: reserve_type
+        tests:
+          - relationships:
+              to: ref('dim_reserve_type')
+              field: reserve_type
+      - name: reserve_amount
+        tests: [not_null]
 
-sources:
- - bfs_dw
-   schema: 
-   - bfs_silver
-   tables:
-     - table_name
-     - table_name
+  - name: dim_reserve_type
+    columns:
+      - name: reserve_type_sk
+        tests: [not_null, unique]
+      - name: reserve_type
+        tests: [not_null, unique]
 
+  - name: dim_claim
+    columns:
+      - name: claim_id
+        tests: [not_null, unique]
 
-   schema: 
-   - bfs_gold
-   tables:
-     - table_name
-     - table_name
+  - name: dim_product
+    columns:
+      - name: product_code
+        tests: [not_null, unique]
+
+  - name: dim_customer
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
