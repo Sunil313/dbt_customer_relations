@@ -1,9 +1,10 @@
-name: my_dbt_project
+name: claims_analytics
 version: 1.0.0
 config-version: 2
 
+profile: claims_profile
 model-paths: ["models"]
-model-paths: ["models"]
+macro-paths: ["macros"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
 seed-paths: ["seeds"]
@@ -11,6 +12,14 @@ macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
 models:
+  claims_analytics:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      +schema: analytics
+      +materialized: table
+      
   bfs_dw:
 
     staging:
@@ -69,7 +78,9 @@ models:
       +schema: dw_raw
       +materialized: table
 
-      
+    vars:
+      balances_lookback_days: 14
+  
 target-path: "target"  
 clean-targets:         
   - "target"

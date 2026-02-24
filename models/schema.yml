@@ -1,27 +1,215 @@
-Version: 2
+version: 2
 
-#Models:
- # - name: dim_customers
- #   description: "Customer dimension."
-  #  columns:
-   #   - name: customer_id
-    #    tests: [not_null, unique]
-     # - name: customer_status
-      #   - accepted_values:
-        #      values: ["ACTIVE","INACTIVE"]
+models:
+  - name: fct_claim_reserve_snapshots
+    description: "Daily reserve snapshots per claim, date, and reserve type."
+    config:
+      tags: ["fact", "claims", "reserves"]
+    columns:
+      - name: claim_reserve_sk
+        description: "Surrogate key over (claim_id, snapshot_date, reserve_type)."
+        tests: 
+          - [unique, not_null]
+          - relationships:
+              to: ref('dim_claim')
+              field: claim_id
+          - relationships:
+              to: ref('dim_calendar')
+              field: snapshot_date
+          - dbt_utils.relationships_where:
+              from: "reserve_type"
+              to: ref('dim_reserve_type')
+              field: "reserve_type"
+              from_condition: "1=1"
+              to_condition: "is_active = 1"
 
 
-sources:
- - bfs_dw
-   schema: 
-   - bfs_silver
-   tables:
-     - table_name
-     - table_name
 
+      - name: claim_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_claim')
+              field: claim_id
 
-   schema: 
-   - bfs_gold
-   tables:
-     - table_name
-     - table_name
+      # Prefer policy_sk if available; else policy_id relationship is still valuable
+      - name: policy_id
+        tests:
+          - relationships:
+              to: ref('dim_policy')
+              field: policy_id
+
+      - name: snapshot_date
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_calendar')
+              field: date_day
+
+      - name: reserve_type
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_reserve_type')
+              field: reserve_type
+
+      - name: reserve_amount
+        tests:
+          - not_null
+
+    tests:
+      # Ensure the *grain* is enforced at the base table level
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["claim_id", "snapshot_date", "reserve_type"]
+
+      # Optional: detect impossible negative reserves if not allowed
+      - dbt_utils.expression_is_true:
+          expression: "reserve_amount >= 0"
+
+  - name: fct_account_balance_daily
+    description: "Daily account balances per account_id and date."
+    config:
+      tags: ["fact", "accounts", "balances"]
+    columns:
+      - name: account_balance_sk
+        tests: [unique, not_null]
+
+      - name: account_id
+        tests:
+          - not_null
+
+      - name: balance_date
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_calendar')
+              field: date_day
+
+      - name: currency_code
+        tests:
+          - not_null
+
+      - name: opening_balance
+        tests:
+          - not_null
+
+      - name: closing_balance
+        tests:
+          - not_null
+
+  - name: dim_policy
+    description: "Policy dimension (SCD2). One row per policy version."
+    config:
+      tags: ["dim", "policy", "scd2"]
+    columns:
+      - name: policy_sk
+        tests: [unique, not_null]
+
+      - name: policy_id
+        tests:
+          - not_null
+
+      - name: effective_from
+        tests: [not_null]
+
+      - name: effective_to
+        tests: []
+
+      - name: is_current_record
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+    tests:
+      # Each (policy_id, effective_from) row should be unique
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["policy_id", "effective_from"]
+
+      # Effective_from < Effective_to when to is present
+      - dbt_utils.expression_is_true:
+          expression: "coalesce(effective_to, '2999-12-31') > effective_from"
+
+      # No temporal overlaps across versions of the same business key
+      - dbt_utils.no_overlapping_ranges:
+          partition_by: "policy_id"
+          lower_bound_column: "effective_from"
+          upper_bound_column: "coalesce(effective_to, '2999-12-31')"
+
+  - name: dim_claim
+    description: "Claim attributes."
+    config:
+      tags: ["dim", "claim"]
+    columns:
+      - name: claim_id
+        tests: [unique, not_null]
+
+      - name: claim_status
+        tests:
+          - accepted_values:
+              values: ["OPEN", "CLOSED", "REOPENED"]   # adjust to your domain
+
+      # Optional: No future loss dates beyond today
+      # - name: loss_date
+      #   tests:
+      #     - dbt_utils.expression_is_true:
+      #         expression: "loss_date <= current_date"
+
+  - name: dim_product
+    description: "Product master."
+    config:
+      tags: ["dim", "product"]
+    columns:
+      - name: product_code
+        tests: [unique, not_null]
+
+      # - name: product_line
+      #   tests:
+      #     - accepted_values:
+      #         values: ["AUTO", "HOME", "LIFE", "COMMERCIAL"]  # example
+
+  - name: dim_customer
+    description: "Customer master (person or organization)."
+    config:
+      tags: ["dim", "customer"]
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+      - name: customer_type
+        tests:
+          - accepted_values:
+              values: ["PERSON", "ORGANIZATION"]
+
+  - name: dim_reserve_type
+    description: "Reserve type domain."
+    config:
+      tags: ["dim", "domain"]
+    columns:
+      - name: reserve_type_sk
+        tests: [unique, not_null]
+
+      - name: reserve_type
+        tests: [unique, not_null]
+
+  - name: dim_calendar
+    description: "Calendar/date dimension."
+    config:
+      tags: ["dim", "calendar", "date"]
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
+      - name: is_weekend
+        tests:
+          - accepted_values:
+              values: [0, 1]
+    tests:
+      - name: fct_claim_reserve_snapshots__policy_point_in_time
+        severity: error
+        
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["account_id", "balance_date"]
+
+      # Optional sanity: closing balance must be >= 0 if business rule applies
+      # - dbt_utils.expression_is_true:
+      #     expression: "closing_balance >= 0"
+
