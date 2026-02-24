@@ -1,7 +1,7 @@
 
 # Customer Relations & Claims Analytics dbt Models
 
-This project builds a **claims reserves** and **account balances** analytics mart using dbt.
+This project builds a **claims reserves** , **customer relations** and **account balances** analytics mart using dbt.
 It delivers daily‑grain facts and conformed dimensions to support reporting, trend analysis, and reconciliation.
 
 ---
@@ -161,35 +161,6 @@ join {{ ref('dim_policy') }} p
 ```
 - Bring **`policy_sk`** into the fact for stable point‑in‑time joins.
 
----
-
-## Configuration
-
-### `dbt_project.yml` (example)
-```yaml
-name: claims_analytics
-version: 1.0.0
-config-version: 2
-
-profile: claims_profile
-model-paths: ["models"]
-macro-paths: ["macros"]
-
-models:
-  claims_analytics:
-    staging:
-      +schema: staging
-      +materialized: view
-    marts:
-      +schema: analytics
-      +materialized: table
-```
-
-### Variables (example)
-```yaml
-vars:
-  balances_lookback_days: 14
-```
 
 ---
 
@@ -229,53 +200,6 @@ dbt test --select test_name:fct_claim_reserve_snapshots__policy_point_in_time
 
 ---
 
-## Testing & Documentation
-
-Add/extend `schema.yml` in `models/marts/`:
-
-- **Uniqueness/Not Null** on surrogate keys and grains
-- **Relationships** to conformed dimensions
-- **Accepted Values** for domains like `reserve_type`
-
-Example snippet:
-```yaml
-version: 2
-
-models:
-  - name: fct_claim_reserve_snapshots
-    description: "Daily reserve snapshots per claim, date, and reserve type."
-    columns:
-      - name: claim_reserve_sk
-        tests: [unique, not_null]
-      - name: snapshot_date
-        tests:
-          - not_null
-          - relationships:
-              to: ref('dim_calendar')
-              field: date_day
-      - name: claim_id
-        tests:
-          - not_null
-          - relationships:
-              to: ref('dim_claim')
-              field: claim_id
-      - name: reserve_type
-        tests:
-          - relationships:
-              to: ref('dim_reserve_type')
-              field: reserve_type
-```
-
----
-
-## Performance Tips
-
-- **Partition/Cluster** by date columns (`snapshot_date`, `balance_date`) where supported.
-- Keep **lookback windows configurable**; widen during periods of high late‑arriving data.
-- For **large joins** to SCD2 dims, ensure appropriate clustering/sorting on effective dates.
-- Consider **surrogate keys** (e.g., `policy_sk`) in facts to avoid heavy interval joins at query time.
-
----
 
 ## Lineage (Conceptual)
 
